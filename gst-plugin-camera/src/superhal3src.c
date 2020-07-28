@@ -1,12 +1,12 @@
 /**
- * SECTION:element-qcomhal3src
+ * SECTION:element-superhal3src
  *
- * FIXME:Describe qcomhal3src here.
+ * FIXME:Describe superhal3src here.
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch-1.0 -v -m qcomhal3src ! filesink location=~/test.yuv
+ * gst-launch-1.0 -v -m superhal3src ! filesink location=~/test.yuv
  * </refsect2>
  */
 
@@ -19,11 +19,11 @@
 #include <glib.h>
 #include <glib/gprintf.h>
 
-#include "qcomhal3src.h"
+#include "superhal3src.h"
 
 // TODO TODO define a debug category!!!! for reference look at redmine task
 
-#define qcomhal3src_parent_class parent_class
+#define superhal3src_parent_class parent_class
 
 typedef enum
 {
@@ -31,17 +31,17 @@ typedef enum
     PROP_NUM_FRAMES,
     PROP_CAMERA_ID,
     PROP_LIST_END
-} QcomProp;
+} SuperProp;
 
-#define qcomstream_parent_class parent_class
-G_DEFINE_TYPE(QcomHal3Src, qcomhal3src, GST_TYPE_BIN);
+#define superstream_parent_class parent_class
+G_DEFINE_TYPE(SuperHal3Src, superhal3src, GST_TYPE_BIN);
 
-gboolean qcomhal3src_create_camera(QcomHal3Src *src, const gchar *elem_name,
+gboolean superhal3src_create_camera(SuperHal3Src *src, const gchar *elem_name,
     const guint cam_idx)
 {
     GstPad *static_pad = NULL;
     GstElement *camera = NULL;
-    QcomHal3Cam *cam;
+    SuperHal3Cam *cam;
     GstPad *ghost_pad = NULL;
     gboolean ret = TRUE;
     uint str_idx;
@@ -50,13 +50,13 @@ gboolean qcomhal3src_create_camera(QcomHal3Src *src, const gchar *elem_name,
     g_return_val_if_fail(src != NULL, FALSE);
     g_return_val_if_fail(elem_name != NULL, FALSE);
 
-    camera = g_object_new(GST_TYPE_QCOMHAL3CAM, "name", elem_name, NULL);
+    camera = g_object_new(GST_TYPE_SUPERHAL3CAM, "name", elem_name, NULL);
     if (!camera) {
         GST_ERROR_OBJECT(src, "Could not create %s!", elem_name);
         return FALSE;
     }
 
-    cam = GST_QCOMHAL3CAM_CAST(camera);
+    cam = GST_SUPERHAL3CAM_CAST(camera);
     cam->cam_id = cam_idx;
 
     for (str_idx = 0; str_idx < MAX_STREAMS; ++str_idx) {
@@ -111,11 +111,11 @@ gboolean qcomhal3src_create_camera(QcomHal3Src *src, const gchar *elem_name,
     return ret;
 }
 
-static void qcomhal3src_init(QcomHal3Src *src)
+static void superhal3src_init(SuperHal3Src *src)
 {
     gint i, res;
 
-    /* Create all QcomHal3Cam outputs */
+    /* Create all SuperHal3Cam outputs */
     for (i = 0; i < MAX_CAMS; ++i) {
         int elem_name_len = NAME_LEN / 4;
         gchar cur_src_elem_name[elem_name_len];
@@ -126,11 +126,11 @@ static void qcomhal3src_init(QcomHal3Src *src)
             return;
         }
 
-        qcomhal3src_create_camera(src, cur_src_elem_name, i);
+        superhal3src_create_camera(src, cur_src_elem_name, i);
     }
 }
 
-static gboolean qcomhal3src_proxy_pad_is_linked(GstPad *prxy_pad)
+static gboolean superhal3src_proxy_pad_is_linked(GstPad *prxy_pad)
 {
     GstPad *peer = NULL;
     GstObject *cam_bin_proxy_pad = NULL;
@@ -141,7 +141,7 @@ static gboolean qcomhal3src_proxy_pad_is_linked(GstPad *prxy_pad)
         return FALSE;
     }
 
-    /* peer's parent is the proxy ghost pad of qcomcam bin element */
+    /* peer's parent is the proxy ghost pad of supercam bin element */
     cam_bin_proxy_pad = gst_pad_get_parent(prxy_pad);
     if (!cam_bin_proxy_pad) {
         GST_ERROR_OBJECT(prxy_pad, "Cannot get parent object of peer pad!");
@@ -151,14 +151,14 @@ static gboolean qcomhal3src_proxy_pad_is_linked(GstPad *prxy_pad)
     return gst_pad_is_linked(GST_PAD(cam_bin_proxy_pad));
 }
 
-static GstStateChangeReturn qcomhal3src_change_state(GstElement *element,
+static GstStateChangeReturn superhal3src_change_state(GstElement *element,
                                                      GstStateChange transition)
 {
     gboolean res;
     GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
     GstStateChangeReturn tmp;
-    QcomHal3Src *src = GST_QCOMHAL3SRC_CAST(element);
-    QcomStream *cur_str = NULL;
+    SuperHal3Src *src = GST_SUPERHAL3SRC_CAST(element);
+    SuperStream *cur_str = NULL;
 
     ret = GST_ELEMENT_CLASS(parent_class)->change_state(element, transition);
 
@@ -179,21 +179,21 @@ static GstStateChangeReturn qcomhal3src_change_state(GstElement *element,
     return ret;
 }
 
-static void qcomhal3src_dispose(GObject *object)
+static void superhal3src_dispose(GObject *object)
 {
     G_OBJECT_CLASS(parent_class)->dispose(object);
 }
 
-static void qcomhal3src_finalize(GObject *object)
+static void superhal3src_finalize(GObject *object)
 {
     G_OBJECT_CLASS(parent_class)->finalize(object);
 }
 
-static void qcomhal3src_set_property(GObject *object, guint prop_id,
+static void superhal3src_set_property(GObject *object, guint prop_id,
                                    const GValue *value, GParamSpec *pspec)
 {
-    QcomHal3Src *src = GST_QCOMHAL3SRC_CAST(object);
-    QcomStream *stream = NULL;
+    SuperHal3Src *src = GST_SUPERHAL3SRC_CAST(object);
+    SuperStream *stream = NULL;
     gboolean res = 0;
     int i;
 
@@ -208,10 +208,10 @@ static void qcomhal3src_set_property(GObject *object, guint prop_id,
     }
 }
 
-static void qcomhal3src_get_property(GObject *object, guint prop_id,
+static void superhal3src_get_property(GObject *object, guint prop_id,
                                    GValue *value, GParamSpec *pspec)
 {
-    QcomHal3Src *src = GST_QCOMHAL3SRC_CAST(object);
+    SuperHal3Src *src = GST_SUPERHAL3SRC_CAST(object);
 
     gint num_buffers;
     gint tmp;
@@ -228,7 +228,7 @@ static void qcomhal3src_get_property(GObject *object, guint prop_id,
     }
 }
 
-static void qcomhal3src_class_init(QcomHal3SrcClass *src_clas) {
+static void superhal3src_class_init(SuperHal3SrcClass *src_clas) {
 
     GObjectClass *gobject_class;
     GstElementClass *element_class;
@@ -236,12 +236,12 @@ static void qcomhal3src_class_init(QcomHal3SrcClass *src_clas) {
     gobject_class = G_OBJECT_CLASS(src_clas);
     element_class = GST_ELEMENT_CLASS(src_clas);
 
-    gobject_class->dispose = qcomhal3src_dispose;
-    gobject_class->finalize = qcomhal3src_finalize;
-    gobject_class->set_property = qcomhal3src_set_property;
-    gobject_class->get_property = qcomhal3src_get_property;
+    gobject_class->dispose = superhal3src_dispose;
+    gobject_class->finalize = superhal3src_finalize;
+    gobject_class->set_property = superhal3src_set_property;
+    gobject_class->get_property = superhal3src_get_property;
 
-    element_class->change_state = GST_DEBUG_FUNCPTR(qcomhal3src_change_state);
+    element_class->change_state = GST_DEBUG_FUNCPTR(superhal3src_change_state);
 
     /* Number of frames to limit output to */
     g_object_class_install_property(gobject_class, PROP_NUM_FRAMES,

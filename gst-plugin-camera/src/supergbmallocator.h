@@ -1,5 +1,5 @@
-#ifndef __QCOM_GBM_ALLOCATOR_H__
-#define __QCOM_GBM_ALLOCATOR_H__
+#ifndef __SUPER_GBM_ALLOCATOR_H__
+#define __SUPER_GBM_ALLOCATOR_H__
 
 #include <gst/gst.h>
 #include <gst/gstatomicqueue.h>
@@ -33,9 +33,9 @@ G_BEGIN_DECLS
 
 typedef struct _GbmAllocator GbmAllocator;
 typedef struct _GbmAllocatorClass GbmAllocatorClass;
-typedef struct _QcomMemoryGroup QcomMemoryGroup;
-typedef struct _QcomMemory QcomMemory;
-typedef struct _QcomHALFormat QcomHALFormat;
+typedef struct _SuperMemoryGroup SuperMemoryGroup;
+typedef struct _SuperMemory SuperMemory;
+typedef struct _SuperHALFormat SuperHALFormat;
 typedef enum _AllocResult AllocResult;
 
 
@@ -45,7 +45,7 @@ enum _AllocResult {
     ALLOC_BUSY  = -2
 };
 
-struct _QcomHALFormat {
+struct _SuperHALFormat {
     guint32 width;
     guint32 height;
     guint32 stride[MAX_PLANES];
@@ -55,16 +55,16 @@ struct _QcomHALFormat {
     android_pixel_format_t pix_fmt;
 };
 
-struct _QcomMemory {
+struct _SuperMemory {
     GstMemory mem;
     gint plane;
-    QcomMemoryGroup *group;
+    SuperMemoryGroup *group;
     gpointer data;
     int size;
     guint buf_idx;
 };
 
-struct _QcomMemoryGroup {
+struct _SuperMemoryGroup {
     GstMemory *mem;
     gint mems_allocated;
     buffer_handle_t buffer;
@@ -74,10 +74,10 @@ struct _QcomMemoryGroup {
 
 struct _GbmAllocator {
     GstAllocator parent;
-    QcomHALFormat format;
+    SuperHALFormat format;
     gboolean active;
 
-    QcomMemoryGroup *groups[MAX_FRAME];
+    SuperMemoryGroup *groups[MAX_FRAME];
     guint32 count;
     GstAtomicQueue *queue;
     // libGBM members:
@@ -90,25 +90,25 @@ struct _GbmAllocatorClass {
 };
 
 GType gbm_allocator_get_type();
-GQuark qcom_memory_quark();
-GbmAllocator *gbm_allocator_new(GstObject *parent, QcomHALFormat *format);
+GQuark super_memory_quark();
+GbmAllocator *gbm_allocator_new(GstObject *parent, SuperHALFormat *format);
 void gbm_allocator_start(GbmAllocator *allocator, guint32 count);
 AllocResult gbm_allocator_stop(GbmAllocator *allocator);
 void gbm_allocator_flush (GbmAllocator *allocator);
-void gbm_allocator_prepare_buf(GbmAllocator *allocator, QcomMemoryGroup *group);
-QcomMemoryGroup *gbm_allocator_get_memory_group(GbmAllocator *allocator,
+void gbm_allocator_prepare_buf(GbmAllocator *allocator, SuperMemoryGroup *group);
+SuperMemoryGroup *gbm_allocator_get_memory_group(GbmAllocator *allocator,
     const buffer_handle_t *buffer);
-QcomMemoryGroup *gbm_allocator_get_free_group(GbmAllocator *allocator);
-QcomMemoryGroup *qcom_memory_group_new(GbmAllocator *allocator, guint32 index);
-QcomMemory *gbm_allocator_memory_new(GstMemoryFlags flags,
+SuperMemoryGroup *gbm_allocator_get_free_group(GbmAllocator *allocator);
+SuperMemoryGroup *super_memory_group_new(GbmAllocator *allocator, guint32 index);
+SuperMemory *gbm_allocator_memory_new(GstMemoryFlags flags,
     GstAllocator *allocator, GstMemory *parent, gsize maxsize, gsize align,
     gsize offset, gsize size, gint plane, gpointer data,
-    QcomMemoryGroup *group);
+    SuperMemoryGroup *group);
 int gbm_allocator_allocate_buff(GbmAllocator *allocator, uint32_t width,
     uint32_t height, uint32_t format, uint64_t prod_usage_flags,
-    uint64_t consum_usage_flags, uint32_t *stride, QcomMemory **mem,
-    QcomMemoryGroup *group, uint32_t index);
+    uint64_t consum_usage_flags, uint32_t *stride, SuperMemory **mem,
+    SuperMemoryGroup *group, uint32_t index);
 
 G_END_DECLS
 
-#endif /* __QCOM_GBM_ALLOCATOR_H__ */
+#endif /* __SUPER_GBM_ALLOCATOR_H__ */

@@ -13,7 +13,7 @@
 
 #include <gbm_priv.h>
 
-#include "qcomgbmallocator.h"
+#include "supergbmallocator.h"
 
 #define HAL_PIXEL_FORMAT_UBWCTP10      0x7FA30C09   ///< UBWCTP10
 #define HAL_PIXEL_FORMAT_UBWCNV12      0x7FA30C06   ///< UBWCNV12
@@ -219,8 +219,8 @@ static void gbm_allocator_free_gbm_bo(struct gbm_bo *gbm_bo)
 
 int gbm_allocator_allocate_buff(GbmAllocator *allocator, uint32_t width,
     uint32_t height, uint32_t format, uint64_t prod_usage_flags,
-    uint64_t consum_usage_flags, uint32_t *stride, QcomMemory **mem,
-    QcomMemoryGroup *group, uint32_t index)
+    uint64_t consum_usage_flags, uint32_t *stride, SuperMemory **mem,
+    SuperMemoryGroup *group, uint32_t index)
 {
     int bo_fd, results = 0;
     size_t bo_size = 0;
@@ -293,9 +293,9 @@ error:
     return results;
 }
 
-static void gbm_allocator_release(GbmAllocator *allocator, QcomMemory *mem)
+static void gbm_allocator_release(GbmAllocator *allocator, SuperMemory *mem)
 {
-    QcomMemoryGroup *group = mem->group;
+    SuperMemoryGroup *group = mem->group;
 
     if (g_atomic_int_dec_and_test(&group->mems_allocated)) {
         GST_LOG_OBJECT(allocator, "buffer %u released", group->buf_idx);
@@ -305,21 +305,21 @@ static void gbm_allocator_release(GbmAllocator *allocator, QcomMemory *mem)
     g_object_unref(allocator);
 }
 
-static gpointer qcom_memory_map(QcomMemory *mem, gsize maxsize,
+static gpointer super_memory_map(SuperMemory *mem, gsize maxsize,
     GstMapFlags flags)
 {
     return mem->data;
 }
 
-static gboolean qcom_memory_unmap(QcomMemory *mem)
+static gboolean super_memory_unmap(SuperMemory *mem)
 {
     return TRUE;
 }
 
-static gboolean qcom_memory_dispose(QcomMemory *mem)
+static gboolean super_memory_dispose(SuperMemory *mem)
 {
     gboolean ret;
-    QcomMemoryGroup *group = mem->group;
+    SuperMemoryGroup *group = mem->group;
     GbmAllocator *allocator = (GbmAllocator *) mem->mem.allocator;
 
     if (group->mem) {
@@ -334,18 +334,18 @@ static gboolean qcom_memory_dispose(QcomMemory *mem)
     return ret;
 }
 
-inline QcomMemory *gbm_allocator_memory_new(GstMemoryFlags flags,
+inline SuperMemory *gbm_allocator_memory_new(GstMemoryFlags flags,
     GstAllocator *allocator, GstMemory *parent, gsize maxsize, gsize align,
     gsize offset, gsize size, gint plane, gpointer data,
-    QcomMemoryGroup * group)
+    SuperMemoryGroup * group)
 {
-    QcomMemory *mem = g_slice_new0(QcomMemory);
+    SuperMemory *mem = g_slice_new0(SuperMemory);
     gst_memory_init(GST_MEMORY_CAST(mem), flags, allocator, parent, maxsize,
                     align, offset, size);
 
     if (!parent) {
         mem->mem.mini_object.dispose =
-            (GstMiniObjectDisposeFunction) qcom_memory_dispose;
+            (GstMiniObjectDisposeFunction) super_memory_dispose;
     }
 
     mem->plane = plane;
@@ -356,7 +356,7 @@ inline QcomMemory *gbm_allocator_memory_new(GstMemoryFlags flags,
     return mem;
 }
 
-static void qcom_memory_group_free(QcomMemoryGroup *group)
+static void super_memory_group_free(SuperMemoryGroup *group)
 {
     GstMemory *mem = group->mem;
 
@@ -367,12 +367,12 @@ static void qcom_memory_group_free(QcomMemoryGroup *group)
 
     group->mem = NULL;
 
-    g_slice_free(QcomMemoryGroup, group);
+    g_slice_free(SuperMemoryGroup, group);
 }
 
-QcomMemoryGroup *qcom_memory_group_new(GbmAllocator *allocator, guint32 index)
+SuperMemoryGroup *super_memory_group_new(GbmAllocator *allocator, guint32 index)
 {
-    QcomMemoryGroup *group = g_slice_new(QcomMemoryGroup);
+    SuperMemoryGroup *group = g_slice_new(SuperMemoryGroup);
     memset(group, 0, sizeof(*group));
 
     group->stream_buffer = calloc(1, sizeof(*group->stream_buffer));
@@ -389,15 +389,15 @@ QcomMemoryGroup *qcom_memory_group_new(GbmAllocator *allocator, guint32 index)
     return group;
 
 failed:
-    qcom_memory_group_free(group);
+    super_memory_group_free(group);
     return NULL;
 }
 
 static void gbm_allocator_free(GstAllocator *gallocator, GstMemory *gmem)
 {
     GbmAllocator *allocator = (GbmAllocator *) gallocator;
-    QcomMemory *mem = (QcomMemory *) gmem;
-    QcomMemoryGroup *group = mem->group;
+    SuperMemory *mem = (SuperMemory *) gmem;
+    SuperMemoryGroup *group = mem->group;
     native_handle_t *n_handle;
 
     if (!mem->mem.parent) {
@@ -419,19 +419,19 @@ static void gbm_allocator_free(GstAllocator *gallocator, GstMemory *gmem)
         native_handle_delete(n_handle);
     }
 
-    g_slice_free(QcomMemory, mem);
+    g_slice_free(SuperMemory, mem);
 }
 
 static void gbm_allocator_dispose(GObject *obj)
 {
     gint i;
-    QcomMemoryGroup *group;
+    SuperMemoryGroup *group;
     GbmAllocator *allocator = (GbmAllocator *) obj;
 
     for (i = 0; i < allocator->count; i++) {
         group = ((GbmAllocator *)obj)->groups[i];
         if (group) {
-            qcom_memory_group_free(group);
+            super_memory_group_free(group);
         }
 
         allocator->groups[i] = NULL;
@@ -485,15 +485,15 @@ static void gbm_allocator_init(GbmAllocator *gbm_allocator)
 {
     GstAllocator *gst_alloc = GST_ALLOCATOR_CAST(gbm_allocator);
 
-    gst_alloc->mem_unmap   = (GstMemoryUnmapFunction) qcom_memory_unmap;
-    gst_alloc->mem_map     = (GstMemoryMapFunction) qcom_memory_map;
+    gst_alloc->mem_unmap   = (GstMemoryUnmapFunction) super_memory_unmap;
+    gst_alloc->mem_map     = (GstMemoryMapFunction) super_memory_map;
 
     GST_OBJECT_FLAG_SET(gbm_allocator, GST_ALLOCATOR_FLAG_CUSTOM_ALLOC);
 
     gbm_allocator->queue = gst_atomic_queue_new(MAX_FRAME);
 }
 
-GbmAllocator *gbm_allocator_new(GstObject *parent, QcomHALFormat *format)
+GbmAllocator *gbm_allocator_new(GstObject *parent, SuperHALFormat *format)
 {
     gchar *name, *parent_name;
     GbmAllocator *allocator;
@@ -543,7 +543,7 @@ void gbm_allocator_start(GbmAllocator *allocator, guint32 num_bufs)
     allocator->count = num_bufs;
 
     for (i = 0; i < allocator->count; i++) {
-        allocator->groups[i] = qcom_memory_group_new(allocator, i);
+        allocator->groups[i] = super_memory_group_new(allocator, i);
         if (allocator->groups[i] == NULL) {
             GST_OBJECT_UNLOCK(allocator);
             return;
@@ -582,7 +582,7 @@ AllocResult gbm_allocator_stop(GbmAllocator *allocator)
 
     for (i = 0; i < allocator->count; i++) {
         if (allocator->groups[i]) {
-            qcom_memory_group_free(allocator->groups[i]);
+            super_memory_group_free(allocator->groups[i]);
         }
         allocator->groups[i] = NULL;
     }
@@ -595,9 +595,9 @@ done:
     return ret;
 }
 
-QcomMemoryGroup *gbm_allocator_get_free_group(GbmAllocator *allocator)
+SuperMemoryGroup *gbm_allocator_get_free_group(GbmAllocator *allocator)
 {
-    QcomMemoryGroup *group;
+    SuperMemoryGroup *group;
 
     if (!g_atomic_int_get(&allocator->active)) {
         return NULL;
@@ -620,7 +620,7 @@ void gbm_allocator_flush(GbmAllocator *allocator)
     }
 
     for (i = 0; i < allocator->count; i++) {
-        QcomMemoryGroup *group = allocator->groups[i];
+        SuperMemoryGroup *group = allocator->groups[i];
 
         gst_memory_unref(group->mem);
     }
@@ -628,7 +628,7 @@ void gbm_allocator_flush(GbmAllocator *allocator)
     GST_OBJECT_UNLOCK(allocator);
 }
 
-void gbm_allocator_prepare_buf(GbmAllocator *allocator, QcomMemoryGroup *group)
+void gbm_allocator_prepare_buf(GbmAllocator *allocator, SuperMemoryGroup *group)
 {
     gint i;
 
@@ -639,10 +639,10 @@ void gbm_allocator_prepare_buf(GbmAllocator *allocator, QcomMemoryGroup *group)
     gst_memory_ref(group->mem);
 }
 
-QcomMemoryGroup *gbm_allocator_get_memory_group(GbmAllocator *allocator,
+SuperMemoryGroup *gbm_allocator_get_memory_group(GbmAllocator *allocator,
                                                 const buffer_handle_t *buffer)
 {
-    QcomMemoryGroup *group = NULL;
+    SuperMemoryGroup *group = NULL;
     gint i;
 
     g_return_val_if_fail(g_atomic_int_get(&allocator->active), NULL);

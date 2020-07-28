@@ -15,25 +15,25 @@
 #include <gst/video/gstvideopool.h>
 #include <gst/allocators/gstdmabuf.h>
 
-#include "qcomcambufferpool.h"
-#include "qcomstream.h"
+#include "supercambufferpool.h"
+#include "superstream.h"
 
 #include "log/log.h"
 
 #define MAX_INFLIGHT_REQUESTS (16)
 #define NANOSECONDS_PER_SECOND (1000000000)
 
-#define QCOM_BUFFER_POOL_IMPORT_QUARK qcom_buffer_pool_import_quark()
+#define SUPER_BUFFER_POOL_IMPORT_QUARK super_buffer_pool_import_quark()
 
-#define qcom_buffer_pool_parent_class parent_class
+#define super_buffer_pool_parent_class parent_class
 
-G_DEFINE_TYPE(QcomBufferPool, qcom_buffer_pool, GST_TYPE_BUFFER_POOL);
+G_DEFINE_TYPE(SuperBufferPool, super_buffer_pool, GST_TYPE_BUFFER_POOL);
 
 
-static void qcom_buffer_pool_release_buffer(GstBufferPool *bpool,
+static void super_buffer_pool_release_buffer(GstBufferPool *bpool,
                                             GstBuffer *buffer);
 
-static uint64_t qcom_get_ns_ts()
+static uint64_t super_get_ns_ts()
 {
     uint64_t ts = 0;
     struct timespec time_var;
@@ -44,8 +44,8 @@ static uint64_t qcom_get_ns_ts()
     return ts;
 }
 
-static gboolean qcom_is_buffer_valid(GstBuffer *buffer,
-                                     QcomMemoryGroup **out_group)
+static gboolean super_is_buffer_valid(GstBuffer *buffer,
+                                     SuperMemoryGroup **out_group)
 {
     gboolean valid = FALSE;
     GstMemory *mem = gst_buffer_peek_memory(buffer, 0);
@@ -55,8 +55,8 @@ static gboolean qcom_is_buffer_valid(GstBuffer *buffer,
     }
 
     if (mem) {
-        QcomMemory *vmem = (QcomMemory *) mem;
-        QcomMemoryGroup *group = vmem->group;
+        SuperMemory *vmem = (SuperMemory *) mem;
+        SuperMemoryGroup *group = vmem->group;
 
         if (group->mem != gst_buffer_peek_memory(buffer, 0)) {
              return valid;
@@ -75,7 +75,7 @@ static gboolean qcom_is_buffer_valid(GstBuffer *buffer,
     return valid;
 }
 
-static GQuark qcom_buffer_pool_import_quark()
+static GQuark super_buffer_pool_import_quark()
 {
     static GQuark quark = 0;
 
@@ -86,8 +86,8 @@ static GQuark qcom_buffer_pool_import_quark()
     return quark;
 }
 
-static void qcom_buffer_pool_reset_size(GbmAllocator *allocator,
-                                        QcomMemoryGroup *group)
+static void super_buffer_pool_reset_size(GbmAllocator *allocator,
+                                        SuperMemoryGroup *group)
 {
     gint i;
     gsize size;
@@ -98,12 +98,12 @@ static void qcom_buffer_pool_reset_size(GbmAllocator *allocator,
         return;
     }
 
-    size = ((QcomMemory *)group->mem)->size;
+    size = ((SuperMemory *)group->mem)->size;
     gst_memory_resize(group->mem, 0, size);
 }
 
-static void qcom_cleanup_failed_alloc(GbmAllocator *allocator,
-                                      QcomMemoryGroup *group)
+static void super_cleanup_failed_alloc(GbmAllocator *allocator,
+                                      SuperMemoryGroup *group)
 {
     gint i;
 
@@ -114,12 +114,12 @@ static void qcom_cleanup_failed_alloc(GbmAllocator *allocator,
     }
 }
 
-static QcomMemory *qcom_buffer_pool_get_mmap_memory(QcomBufferPool *pool,
-    QcomMemoryGroup *group, int i)
+static SuperMemory *super_buffer_pool_get_mmap_memory(SuperBufferPool *pool,
+    SuperMemoryGroup *group, int i)
 {
     GbmAllocator *allocator = pool->gbm_allocator;
     gpointer data = NULL;
-    QcomMemory *mem = NULL;
+    SuperMemory *mem = NULL;
     int ret;
     buffer_handle_t buff;
     guint stride;
@@ -129,7 +129,7 @@ static QcomMemory *qcom_buffer_pool_get_mmap_memory(QcomBufferPool *pool,
         GRALLOC1_PRODUCER_USAGE_CAMERA, pool->str->usage,
         &stride, &mem, group, i);
     if (ret) {
-        qcom_cleanup_failed_alloc(allocator, group);
+        super_cleanup_failed_alloc(allocator, group);
    }
 
     group->stream_buffer->buffer = &group->buffer;
@@ -139,10 +139,10 @@ static QcomMemory *qcom_buffer_pool_get_mmap_memory(QcomBufferPool *pool,
     return mem;
 }
 
-static QcomMemoryGroup *qcom_buffer_pool_get_mem_group(QcomBufferPool *pool)
+static SuperMemoryGroup *super_buffer_pool_get_mem_group(SuperBufferPool *pool)
 {
     GbmAllocator *allocator = pool->gbm_allocator;
-    QcomMemoryGroup *group = gbm_allocator_get_free_group(allocator);
+    SuperMemoryGroup *group = gbm_allocator_get_free_group(allocator);
     gint i;
 
     if (!group) {
@@ -150,7 +150,7 @@ static QcomMemoryGroup *qcom_buffer_pool_get_mem_group(QcomBufferPool *pool)
     }
 
     if (group->mem == NULL) {
-        group->mem = (GstMemory *) qcom_buffer_pool_get_mmap_memory(pool,
+        group->mem = (GstMemory *) super_buffer_pool_get_mmap_memory(pool,
             group, pool->num_buffs);
         pool->num_buffs++;
     } else {
@@ -158,20 +158,20 @@ static QcomMemoryGroup *qcom_buffer_pool_get_mem_group(QcomBufferPool *pool)
     }
     group->mems_allocated++;
 
-    qcom_buffer_pool_reset_size(allocator, group);
+    super_buffer_pool_reset_size(allocator, group);
 
     return group;
 }
 
-static GstFlowReturn qcom_buffer_pool_alloc_buffer(GstBufferPool *bpool,
+static GstFlowReturn super_buffer_pool_alloc_buffer(GstBufferPool *bpool,
     GstBuffer **buffer, GstBufferPoolAcquireParams *params)
 {
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(bpool);
-    QcomMemoryGroup *group = NULL;
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(bpool);
+    SuperMemoryGroup *group = NULL;
     GstBuffer *newbuf = NULL;
     GstVideoInfo *info = &pool->str->info;
 
-    group = qcom_buffer_pool_get_mem_group(pool);
+    group = super_buffer_pool_get_mem_group(pool);
     if (group) {
         gint i;
         newbuf = gst_buffer_new();
@@ -194,7 +194,7 @@ static GstFlowReturn qcom_buffer_pool_alloc_buffer(GstBufferPool *bpool,
     return GST_FLOW_OK;
 }
 
-camera3_stream_t *qcom_buffer_pool_get_stream(QcomBufferPool *pool)
+camera3_stream_t *super_buffer_pool_get_stream(SuperBufferPool *pool)
 {
     if (pool) {
         return pool->output_stream;
@@ -203,7 +203,7 @@ camera3_stream_t *qcom_buffer_pool_get_stream(QcomBufferPool *pool)
     return NULL;
 }
 
-static gboolean qcom_buffer_pool_set_config(GstBufferPool *bpool,
+static gboolean super_buffer_pool_set_config(GstBufferPool *bpool,
     GstStructure *config)
 {
     guint size, min_buffers, max_buffers;
@@ -211,8 +211,8 @@ static gboolean qcom_buffer_pool_set_config(GstBufferPool *bpool,
     GstAllocationParams params;
     GstAllocator *allocator;
     GstCaps *caps;
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(bpool);
-    QcomStream *str = pool->str;
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(bpool);
+    SuperStream *str = pool->str;
 
     ret = gst_buffer_pool_config_get_params(config, &caps, &size, &min_buffers,
                                             &max_buffers);
@@ -255,7 +255,7 @@ static gboolean qcom_buffer_pool_set_config(GstBufferPool *bpool,
     return ret;
 }
 
-static gboolean qcom_buffer_pool_start(GstBufferPool *bpool)
+static gboolean super_buffer_pool_start(GstBufferPool *bpool)
 {
     gint ret;
     guint size, min_buffers, max_buffers, max_latency, count;
@@ -263,7 +263,7 @@ static gboolean qcom_buffer_pool_start(GstBufferPool *bpool)
     GstStructure *config;
     GstCaps *caps;
 
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(bpool);
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(bpool);
     GstBufferPoolClass *pclass = GST_BUFFER_POOL_CLASS(parent_class);
 
     GST_DEBUG_OBJECT(pool, "activating pool");
@@ -310,12 +310,12 @@ static gboolean qcom_buffer_pool_start(GstBufferPool *bpool)
     return TRUE;
 }
 
-static gboolean qcom_buffer_pool_stop(GstBufferPool *bpool)
+static gboolean super_buffer_pool_stop(GstBufferPool *bpool)
 {
     gint i, res;
     gboolean ret;
 
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(bpool);
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(bpool);
     GstBufferPoolClass *pclass = GST_BUFFER_POOL_CLASS(parent_class);
 
     GST_DEBUG_OBJECT(pool, "Stopping buffer pool");
@@ -353,9 +353,9 @@ static gboolean qcom_buffer_pool_stop(GstBufferPool *bpool)
     return ret;
 }
 
-static void qcom_buffer_pool_flush_start(GstBufferPool *bpool)
+static void super_buffer_pool_flush_start(GstBufferPool *bpool)
 {
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(bpool);
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(bpool);
 
     GST_DEBUG_OBJECT(pool, "Start flushing");
 
@@ -364,12 +364,12 @@ static void qcom_buffer_pool_flush_start(GstBufferPool *bpool)
     GST_OBJECT_UNLOCK(pool);
 }
 
-static void qcom_buffer_pool_flush_stop(GstBufferPool *bpool)
+static void super_buffer_pool_flush_stop(GstBufferPool *bpool)
 {
     gint i;
     GstBuffer *buffers[MAX_FRAME];
     gboolean res;
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(bpool);
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(bpool);
 
     GST_DEBUG_OBJECT(pool, "stop flushing");
 
@@ -404,10 +404,10 @@ static void qcom_buffer_pool_flush_stop(GstBufferPool *bpool)
             GstBuffer *buffer = buffers[i];
 
             gst_mini_object_set_qdata(GST_MINI_OBJECT(buffer),
-                                      QCOM_BUFFER_POOL_IMPORT_QUARK, NULL, NULL);
+                                      SUPER_BUFFER_POOL_IMPORT_QUARK, NULL, NULL);
 
             if (!buffer->pool) {
-                qcom_buffer_pool_release_buffer(bpool, buffer);
+                super_buffer_pool_release_buffer(bpool, buffer);
             }
 
             g_atomic_int_add(&pool->num_queued, -1);
@@ -415,32 +415,32 @@ static void qcom_buffer_pool_flush_stop(GstBufferPool *bpool)
     }
 }
 
-static GstFlowReturn qcom_buffer_pool_acquire_buffer(GstBufferPool *bpool,
+static GstFlowReturn super_buffer_pool_acquire_buffer(GstBufferPool *bpool,
     GstBuffer **buffer, GstBufferPoolAcquireParams *params)
 {
     gint i;
     GstFlowReturn res;
-    QcomMemoryGroup *qcom_gr;
+    SuperMemoryGroup *super_gr;
     gboolean last_buffer;
     camera3_stream_buffer_t *cam3_buffer;
 
     GstBufferPoolClass *pclass = GST_BUFFER_POOL_CLASS(parent_class);
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(bpool);
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(bpool);
 
     GST_INFO_OBJECT(pool, "Acquire buffer");
 
     cam3_buffer = (camera3_stream_buffer_t *)
          g_async_queue_pop(pool->processed);
 
-    qcom_gr = gbm_allocator_get_memory_group(pool->gbm_allocator,
+    super_gr = gbm_allocator_get_memory_group(pool->gbm_allocator,
                                             cam3_buffer->buffer);
-    if (!qcom_gr) {
+    if (!super_gr) {
         return GST_FLOW_ERROR;
     }
 
-    gst_memory_unref(qcom_gr->mem);
+    gst_memory_unref(super_gr->mem);
 
-    *buffer = pool->buffers[qcom_gr->buf_idx];
+    *buffer = pool->buffers[super_gr->buf_idx];
     if (!*buffer) {
         GST_ERROR_OBJECT(pool, "No free buffer found for index %d.",
                          0);
@@ -454,7 +454,7 @@ static GstFlowReturn qcom_buffer_pool_acquire_buffer(GstBufferPool *bpool,
         GST_OBJECT_UNLOCK(pool);
     }
 
-    pool->buffers[qcom_gr->buf_idx] = NULL;
+    pool->buffers[super_gr->buf_idx] = NULL;
 
     pool->cur_fr_sent++;
     GST_BUFFER_OFFSET(*buffer) = pool->cur_fr_sent;
@@ -464,14 +464,14 @@ static GstFlowReturn qcom_buffer_pool_acquire_buffer(GstBufferPool *bpool,
     return GST_FLOW_OK;
 }
 
-static GstFlowReturn qcomcam_buffer_pool_prepare_cr(QcomBufferPool *pool,
+static GstFlowReturn supercam_buffer_pool_prepare_cr(SuperBufferPool *pool,
     GstBuffer *buf)
 {
     gboolean res;
 
-    QcomMemoryGroup *group = NULL;
+    SuperMemoryGroup *group = NULL;
 
-    res = qcom_is_buffer_valid(buf, &group);
+    res = super_is_buffer_valid(buf, &group);
     if (!res) {
         GST_LOG_OBJECT(pool, "unref copied/invalid buffer %p", buf);
         gst_buffer_unref(buf);
@@ -497,21 +497,21 @@ static GstFlowReturn qcomcam_buffer_pool_prepare_cr(QcomBufferPool *pool,
     return GST_FLOW_OK;
 }
 
-static void qcom_buffer_pool_release_buffer(GstBufferPool *bpool,
+static void super_buffer_pool_release_buffer(GstBufferPool *bpool,
     GstBuffer *buffer)
 {
     gboolean res;
     GstFlowReturn ret;
-    QcomMemoryGroup *group;
+    SuperMemoryGroup *group;
     GstBufferPoolClass *pclass = GST_BUFFER_POOL_CLASS(parent_class);
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(bpool);
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(bpool);
 
     GST_INFO_OBJECT(pool, "Release buffer %p", buffer);
 
-    res = qcom_is_buffer_valid(buffer, &group);
+    res = super_is_buffer_valid(buffer, &group);
 
     if (res) {
-        ret = qcomcam_buffer_pool_prepare_cr(pool, buffer);
+        ret = supercam_buffer_pool_prepare_cr(pool, buffer);
         if (ret != GST_FLOW_OK) {
             pclass->release_buffer(bpool, buffer);
         }
@@ -521,9 +521,9 @@ static void qcom_buffer_pool_release_buffer(GstBufferPool *bpool,
     }
 }
 
-static void qcom_buffer_pool_dispose(GObject *object)
+static void super_buffer_pool_dispose(GObject *object)
 {
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(object);
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(object);
 
     if (pool->gbm_allocator) {
         gst_object_unref(pool->gbm_allocator);
@@ -553,9 +553,9 @@ static void qcom_buffer_pool_dispose(GObject *object)
     G_OBJECT_CLASS(parent_class)->dispose(object);
 }
 
-static void qcom_buffer_pool_finalize(GObject *object)
+static void super_buffer_pool_finalize(GObject *object)
 {
-    QcomBufferPool *pool = GST_QCOM_BUFFER_POOL(object);
+    SuperBufferPool *pool = GST_SUPER_BUFFER_POOL(object);
 
     gst_object_unref(pool->str);
 
@@ -582,41 +582,41 @@ static void qcom_buffer_pool_finalize(GObject *object)
     G_OBJECT_CLASS(parent_class)->finalize(object);
 }
 
-static void qcom_buffer_pool_init(QcomBufferPool *pool)
+static void super_buffer_pool_init(SuperBufferPool *pool)
 {
     pool->empty = TRUE;
 }
 
-static void qcom_buffer_pool_class_init(QcomBufferPoolClass *class)
+static void super_buffer_pool_class_init(SuperBufferPoolClass *class)
 {
     GObjectClass *object_class = G_OBJECT_CLASS(class);
     GstBufferPoolClass *bufferpool_class = GST_BUFFER_POOL_CLASS(class);
 
-    object_class->dispose = qcom_buffer_pool_dispose;
-    object_class->finalize = qcom_buffer_pool_finalize;
+    object_class->dispose = super_buffer_pool_dispose;
+    object_class->finalize = super_buffer_pool_finalize;
 
-    bufferpool_class->start = qcom_buffer_pool_start;
-    bufferpool_class->stop = qcom_buffer_pool_stop;
-    bufferpool_class->set_config = qcom_buffer_pool_set_config;
-    bufferpool_class->alloc_buffer = qcom_buffer_pool_alloc_buffer;
-    bufferpool_class->acquire_buffer = qcom_buffer_pool_acquire_buffer;
-    bufferpool_class->release_buffer = qcom_buffer_pool_release_buffer;
-    bufferpool_class->flush_start = qcom_buffer_pool_flush_start;
-    bufferpool_class->flush_stop = qcom_buffer_pool_flush_stop;
+    bufferpool_class->start = super_buffer_pool_start;
+    bufferpool_class->stop = super_buffer_pool_stop;
+    bufferpool_class->set_config = super_buffer_pool_set_config;
+    bufferpool_class->alloc_buffer = super_buffer_pool_alloc_buffer;
+    bufferpool_class->acquire_buffer = super_buffer_pool_acquire_buffer;
+    bufferpool_class->release_buffer = super_buffer_pool_release_buffer;
+    bufferpool_class->flush_start = super_buffer_pool_flush_start;
+    bufferpool_class->flush_stop = super_buffer_pool_flush_stop;
 }
 
-GstBufferPool *qcom_buffer_pool_new(QcomStream *str, GstCaps *caps)
+GstBufferPool *super_buffer_pool_new(SuperStream *str, GstCaps *caps)
 {
     gchar *parent_name, *name;
     GstStructure *config;
-    QcomBufferPool *pool;
+    SuperBufferPool *pool;
 
     /* setting a significant unique name */
     parent_name = gst_object_get_name(GST_OBJECT(str));
     name = g_strconcat(parent_name, ":", "pool:", "src", NULL);
     g_free(parent_name);
 
-    pool = (QcomBufferPool *) g_object_new(GST_TYPE_QCOM_BUFFER_POOL, "name",
+    pool = (SuperBufferPool *) g_object_new(GST_TYPE_SUPER_BUFFER_POOL, "name",
                                            name, NULL);
     g_free(name);
 

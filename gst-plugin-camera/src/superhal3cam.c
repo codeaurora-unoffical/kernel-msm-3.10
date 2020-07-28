@@ -10,9 +10,9 @@
 #include <glib.h>
 #include <glib/gprintf.h>
 
-#include "qcomhal3cam.h"
+#include "superhal3cam.h"
 
-#define CAMERA_HAL_LIB "/usr/lib64/hw/camera.qcom.so"
+#define CAMERA_HAL_LIB "/usr/lib64/hw/camera.super.so"
 #define CAMERA_CONS_USAGE GRALLOC1_CONSUMER_USAGE_NONE
 #define PENDING_BUFF_QUEUE_TIMEOUT_US (66000)
 
@@ -22,24 +22,24 @@ typedef enum
     PROP_NUM_FRAMES,
     PROP_CAMERA_ID,
     PROP_LIST_END
-} QcomProp;
+} SuperProp;
 
-#define qcomhal3cam_parent_class parent_class
-G_DEFINE_TYPE(QcomHal3Cam, qcomhal3cam, GST_TYPE_BIN);
+#define superhal3cam_parent_class parent_class
+G_DEFINE_TYPE(SuperHal3Cam, superhal3cam, GST_TYPE_BIN);
 
-static void qcomhal3cam_notify(const struct camera3_callback_ops *ops,
+static void superhal3cam_notify(const struct camera3_callback_ops *ops,
     const camera3_notify_msg_t *msg)
 {
 }
 
-static void qcomhal3cam_camera_device_status_change(
+static void superhal3cam_camera_device_status_change(
     const struct camera_module_callbacks* callbacks,
     int camera_id,
     int new_status)
 {
 }
 
-static void qcomhal3cam_torch_mode_status_change(
+static void superhal3cam_torch_mode_status_change(
     const struct camera_module_callbacks* callbacks,
     const char* camera_id,
     int new_status)
@@ -47,17 +47,17 @@ static void qcomhal3cam_torch_mode_status_change(
 }
 
 camera_module_callbacks_t g_module_callbacks = {
-    qcomhal3cam_camera_device_status_change,
-    qcomhal3cam_torch_mode_status_change
+    superhal3cam_camera_device_status_change,
+    superhal3cam_torch_mode_status_change
 };
 
-static void qcomhal3cam_process_capture_result(
+static void superhal3cam_process_capture_result(
     const struct camera3_callback_ops *ops,
     const camera3_capture_result_t *result)
 {
     CallbackOps *cb_ops = (CallbackOps *)ops;
-    QcomHal3Cam *cam = cb_ops->parent;
-    QcomBufferPool *cur_pool;
+    SuperHal3Cam *cam = cb_ops->parent;
+    SuperBufferPool *cur_pool;
     camera3_stream_buffer_t *inflight_buff;
     int i, j;
 
@@ -70,7 +70,7 @@ static void qcomhal3cam_process_capture_result(
 
     for (i = 0; i < cam->num_streams; ++i) {
 
-        cur_pool = GST_QCOMSTREAM(cam->streams[i])->pool;
+        cur_pool = GST_SUPERSTREAM(cam->streams[i])->pool;
 
         if (!cur_pool) {
             GST_ERROR_OBJECT(cam, "No buffer pool!");
@@ -105,7 +105,7 @@ static void qcomhal3cam_process_capture_result(
     }
 }
 
-static void *qcomhal3cam_cr_thread_function(void *prm)
+static void *superhal3cam_cr_thread_function(void *prm)
 {
     CRThreadData *data = (CRThreadData *)prm;
     CRThreadMessage *msg = NULL;
@@ -220,9 +220,9 @@ static void *qcomhal3cam_cr_thread_function(void *prm)
     }
 }
 
-static gboolean qcomhal3cam_bp_created(gpointer data)
+static gboolean superhal3cam_bp_created(gpointer data)
 {
-    QcomHal3Cam *cam = GST_QCOMHAL3CAM_CAST(data);
+    SuperHal3Cam *cam = GST_SUPERHAL3CAM_CAST(data);
 
     g_return_val_if_fail(cam != NULL, FALSE);
 
@@ -239,7 +239,7 @@ static gboolean qcomhal3cam_bp_created(gpointer data)
     return TRUE;
 }
 
-static void qcomhal3cam_wait_buffer_pools(QcomHal3Cam *cam)
+static void superhal3cam_wait_buffer_pools(SuperHal3Cam *cam)
 {
     pthread_mutex_lock(&cam->pushsrc_sync.lock);
 
@@ -255,7 +255,7 @@ static void qcomhal3cam_wait_buffer_pools(QcomHal3Cam *cam)
     pthread_mutex_unlock(&cam->pushsrc_sync.lock);
 }
 
-gboolean qcomhal3cam_create_output(QcomHal3Cam *cam, const gchar *elem_name,
+gboolean superhal3cam_create_output(SuperHal3Cam *cam, const gchar *elem_name,
     const guint idx)
 {
     GstPad *static_pad = NULL;
@@ -266,7 +266,7 @@ gboolean qcomhal3cam_create_output(QcomHal3Cam *cam, const gchar *elem_name,
     g_return_val_if_fail(cam != NULL, FALSE);
     g_return_val_if_fail(elem_name != NULL, FALSE);
 
-    output = qcom_stream_create(cam, elem_name, qcomhal3cam_bp_created,
+    output = super_stream_create(cam, elem_name, superhal3cam_bp_created,
                                 cam->cam_id);
     if (!output) {
         GST_ERROR_OBJECT(cam, "Could not create %s!", elem_name);
@@ -281,16 +281,16 @@ gboolean qcomhal3cam_create_output(QcomHal3Cam *cam, const gchar *elem_name,
     }
 
     cam->streams[idx] = output;
-    GST_QCOMSTREAM(cam->streams[idx])->usage = CAMERA_CONS_USAGE;
+    GST_SUPERSTREAM(cam->streams[idx])->usage = CAMERA_CONS_USAGE;
 
     return ret;
 }
 
-static gboolean qcomhal3cam_create_streams(QcomHal3Cam *cam)
+static gboolean superhal3cam_create_streams(SuperHal3Cam *cam)
 {
     int i, res;
 
-    /* Create all QcomStream outputs */
+    /* Create all SuperStream outputs */
     for (i = 0; i < MAX_STREAMS; ++i) {
         int elem_name_len = NAME_LEN / 4;
         gchar stream_name[elem_name_len];
@@ -301,7 +301,7 @@ static gboolean qcomhal3cam_create_streams(QcomHal3Cam *cam)
             goto error;
         }
 
-        res = qcomhal3cam_create_output(cam, stream_name, i);
+        res = superhal3cam_create_output(cam, stream_name, i);
         if (res != TRUE) {
             goto error;
         }
@@ -313,19 +313,19 @@ error:
     return FALSE;
 }
 
-static void qcomhal3cam_init(QcomHal3Cam *cam)
+static void superhal3cam_init(SuperHal3Cam *cam)
 {
     cam->cb_ops.ops.process_capture_result =
-        qcomhal3cam_process_capture_result;
-    cam->cb_ops.ops.notify = qcomhal3cam_notify;
+        superhal3cam_process_capture_result;
+    cam->cb_ops.ops.notify = superhal3cam_notify;
     cam->cb_ops.parent = gst_object_ref(cam);
 
-    if (qcomhal3cam_create_streams(cam) != TRUE) {
-        GST_ERROR_OBJECT(cam, "Failed to create qcomhal3cam_elements!");
+    if (superhal3cam_create_streams(cam) != TRUE) {
+        GST_ERROR_OBJECT(cam, "Failed to create superhal3cam_elements!");
     }
 }
 
-static int qcomhal3cam_open_hal(QcomHal3Cam *cam)
+static int superhal3cam_open_hal(SuperHal3Cam *cam)
 {
     int ret;
     void *lib_hndl = NULL;
@@ -364,7 +364,7 @@ static int qcomhal3cam_open_hal(QcomHal3Cam *cam)
     return ret;
 }
 
-static gboolean qcomhal3cam_open_camera(QcomHal3Cam *cam)
+static gboolean superhal3cam_open_camera(SuperHal3Cam *cam)
 {
     int ret;
     char camera_name[20] = {0};
@@ -387,18 +387,18 @@ static gboolean qcomhal3cam_open_camera(QcomHal3Cam *cam)
     return TRUE;
 }
 
-static gint qcomhal3cam_compare_by_resolution(QcomHALFormat *lhs,
-    QcomHALFormat *rhs)
+static gint superhal3cam_compare_by_resolution(SuperHALFormat *lhs,
+    SuperHALFormat *rhs)
 {
     return ((rhs->height * rhs->width) - (lhs->height * lhs->width));
 }
 
-static gboolean qcomhal3cam_fill_formats_list(QcomHal3Cam *cam)
+static gboolean superhal3cam_fill_formats_list(SuperHal3Cam *cam)
 {
     int res;
     gint i, ret;
     GList *formats;
-    QcomHALFormat *format;
+    SuperHALFormat *format;
     struct camera_info info;
     camera_metadata_ro_entry_t str_cfgs;
     camera_metadata_t *static_meta;
@@ -422,7 +422,7 @@ static gboolean qcomhal3cam_fill_formats_list(QcomHal3Cam *cam)
     for (i = 0; i < str_cfgs.count; i += 4) {
         if (ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT ==
             str_cfgs.data.i32[i + 3]) {
-            format = g_new0(QcomHALFormat, 1);
+            format = g_new0(SuperHALFormat, 1);
 
             switch (str_cfgs.data.i32[i]) {
             case ANDROID_SCALER_AVAILABLE_FORMATS_IMPLEMENTATION_DEFINED:
@@ -451,10 +451,10 @@ static gboolean qcomhal3cam_fill_formats_list(QcomHal3Cam *cam)
     }
 
     cam->formats = g_list_sort(cam->formats,
-        (GCompareFunc) qcomhal3cam_compare_by_resolution);
+        (GCompareFunc) superhal3cam_compare_by_resolution);
 
     for (formats = cam->formats; formats != NULL; formats = formats->next) {
-        format = (QcomHALFormat *)formats->data;
+        format = (SuperHALFormat *)formats->data;
         GST_INFO_OBJECT(cam, "Got HAL Format %d %ux%u", format->pix_fmt,
                         format->width, format->height);
     }
@@ -462,16 +462,16 @@ static gboolean qcomhal3cam_fill_formats_list(QcomHal3Cam *cam)
     return TRUE;
 }
 
-static gboolean qcomhal3cam_distribute_formats(QcomHal3Cam *cam)
+static gboolean superhal3cam_distribute_formats(SuperHal3Cam *cam)
 {
     gboolean res;
     gint i;
-    QcomStream *cur_str;
+    SuperStream *cur_str;
 
     for (i = 0; i < MAX_STREAMS; ++i) {
-        cur_str = GST_QCOMSTREAM(cam->streams[i]);
+        cur_str = GST_SUPERSTREAM(cam->streams[i]);
 
-        res = qcom_stream_save_formats(cur_str, cam->formats);
+        res = super_stream_save_formats(cur_str, cam->formats);
         if (res != TRUE) {
             GST_ERROR_OBJECT(cam, "Could not copy formats list!");
             return res;
@@ -481,10 +481,10 @@ static gboolean qcomhal3cam_distribute_formats(QcomHal3Cam *cam)
     return res;
 }
 
-static gboolean qcomhal3cam_configure_streams(QcomHal3Cam *cam)
+static gboolean superhal3cam_configure_streams(SuperHal3Cam *cam)
 {
     gint i, res;
-    QcomStream *cur_str = NULL;
+    SuperStream *cur_str = NULL;
     camera3_stream_t *cur_output_stream = NULL;
     camera3_stream_t *streams[MAX_STREAMS];
     camera3_stream_configuration_t stream_config;
@@ -493,9 +493,9 @@ static gboolean qcomhal3cam_configure_streams(QcomHal3Cam *cam)
     stream_config.num_streams = 0;
 
     for (i = 0; i < cam->num_streams; ++i) {
-        cur_str = GST_QCOMSTREAM(cam->streams[i]);
+        cur_str = GST_SUPERSTREAM(cam->streams[i]);
 
-        cur_output_stream = qcom_buffer_pool_get_stream(cur_str->pool);
+        cur_output_stream = super_buffer_pool_get_stream(cur_str->pool);
         if (!cur_output_stream) {
             GST_WARNING_OBJECT(cam, "Missing output stream %d, probably not"
                                " linked to a downstream element !", i);
@@ -528,7 +528,7 @@ static gboolean qcomhal3cam_configure_streams(QcomHal3Cam *cam)
     return TRUE;
 }
 
-static gboolean qcomhal3cam_init_cr_thread(QcomHal3Cam *cam)
+static gboolean superhal3cam_init_cr_thread(SuperHal3Cam *cam)
 {
     int i, res;
 
@@ -541,11 +541,11 @@ static gboolean qcomhal3cam_init_cr_thread(QcomHal3Cam *cam)
 
     for (i = 0; i < cam->num_streams; ++i) {
         cam->crt_data.pools[i] =
-            gst_object_ref(GST_QCOMSTREAM(cam->streams[i])->pool);
+            gst_object_ref(GST_SUPERSTREAM(cam->streams[i])->pool);
     }
 
     res = pthread_create(&cam->cr_thread, NULL,
-                         qcomhal3cam_cr_thread_function,
+                         superhal3cam_cr_thread_function,
                          &cam->crt_data);
     if (res < 0) {
         GST_ELEMENT_ERROR(cam, RESOURCE, FAILED,
@@ -561,7 +561,7 @@ static gboolean qcomhal3cam_init_cr_thread(QcomHal3Cam *cam)
     return TRUE;
 }
 
-static gboolean qcomhal3cam_deinit_cr_thread(QcomHal3Cam *cam)
+static gboolean superhal3cam_deinit_cr_thread(SuperHal3Cam *cam)
 {
     int i, ret;
     CRThreadMessage exit_msg = {STOP, NULL};
@@ -589,12 +589,12 @@ static gboolean qcomhal3cam_deinit_cr_thread(QcomHal3Cam *cam)
     return TRUE;
 }
 
-static gboolean qcomhal3cam_stop_camera(QcomHal3Cam *cam)
+static gboolean superhal3cam_stop_camera(SuperHal3Cam *cam)
 {
     gint res;
 
     if (cam) {
-        res = qcomhal3cam_deinit_cr_thread(cam);
+        res = superhal3cam_deinit_cr_thread(cam);
         if (res != TRUE) {
             GST_ERROR_OBJECT(cam, "CR thread deinit failure!");
             return FALSE;
@@ -618,17 +618,17 @@ static gboolean qcomhal3cam_stop_camera(QcomHal3Cam *cam)
     return TRUE;
 }
 
-static gboolean qcomhal3cam_start_camera(QcomHal3Cam *cam)
+static gboolean superhal3cam_start_camera(SuperHal3Cam *cam)
 {
     gboolean ret = TRUE;
 
     if (cam) {
-        ret = qcomhal3cam_configure_streams(cam);
+        ret = superhal3cam_configure_streams(cam);
         if (ret != TRUE) {
             return ret;
         }
 
-        ret = qcomhal3cam_init_cr_thread(cam);
+        ret = superhal3cam_init_cr_thread(cam);
         if (ret != TRUE) {
             return ret;
         }
@@ -637,20 +637,20 @@ static gboolean qcomhal3cam_start_camera(QcomHal3Cam *cam)
     return ret;
 }
 
-static void qcomhal3cam_clear_formats_list(QcomHal3Cam *cam)
+static void superhal3cam_clear_formats_list(SuperHal3Cam *cam)
 {
     g_list_foreach(cam->formats, (GFunc) g_free, NULL);
     g_list_free(cam->formats);
     cam->formats = NULL;
 }
 
-static gboolean qcomlhal3cam_has_linked_pads(QcomHal3Cam *cam)
+static gboolean superlhal3cam_has_linked_pads(SuperHal3Cam *cam)
 {
     gint i;
     gboolean linked;
 
     for (i = 0; i < MAX_STREAMS; ++i) {
-        linked = qcom_stream_is_linked(GST_QCOMSTREAM(cam->streams[i]));
+        linked = super_stream_is_linked(GST_SUPERSTREAM(cam->streams[i]));
         if (linked) {
             return TRUE;
         }
@@ -659,16 +659,16 @@ static gboolean qcomlhal3cam_has_linked_pads(QcomHal3Cam *cam)
     return FALSE;
 }
 
-static GstStateChangeReturn qcomhal3cam_change_state(GstElement *element,
+static GstStateChangeReturn superhal3cam_change_state(GstElement *element,
                                                     GstStateChange transition)
 {
     int i, res;
     GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
     GstStateChangeReturn tmp;
-    QcomHal3Cam *cam = GST_QCOMHAL3CAM_CAST(element);
-    QcomStream *cur_str = NULL;
+    SuperHal3Cam *cam = GST_SUPERHAL3CAM_CAST(element);
+    SuperStream *cur_str = NULL;
 
-    if (!qcomlhal3cam_has_linked_pads(cam)) {
+    if (!superlhal3cam_has_linked_pads(cam)) {
         GST_INFO_OBJECT(cam, "Camera %s does not have pads, linked to any"
                         " downstream element - will not change state",
                         cam->bin.element.object.name);
@@ -677,23 +677,23 @@ static GstStateChangeReturn qcomhal3cam_change_state(GstElement *element,
 
     if (transition == GST_STATE_CHANGE_NULL_TO_READY) {
         if (!CAMERA_HAL_IS_OPEN(cam)) {
-            res = qcomhal3cam_open_hal(cam);
+            res = superhal3cam_open_hal(cam);
             if (res) {
                 return GST_STATE_CHANGE_FAILURE;
             }
         }
 
-        res = qcomhal3cam_open_camera(cam);
+        res = superhal3cam_open_camera(cam);
         if (res != TRUE) {
             return GST_STATE_CHANGE_FAILURE;
         }
 
-        res = qcomhal3cam_fill_formats_list(cam);
+        res = superhal3cam_fill_formats_list(cam);
         if (res != TRUE) {
             return GST_STATE_CHANGE_FAILURE;
         }
 
-        res = qcomhal3cam_distribute_formats(cam);
+        res = superhal3cam_distribute_formats(cam);
         if (res != TRUE) {
             return GST_STATE_CHANGE_FAILURE;
         }
@@ -704,8 +704,8 @@ static GstStateChangeReturn qcomhal3cam_change_state(GstElement *element,
 
     if (transition == GST_STATE_CHANGE_PAUSED_TO_PLAYING) {
         for (i = 0; i < MAX_STREAMS; ++i) {
-            cur_str = GST_QCOMSTREAM(cam->streams[i]);
-            gboolean linked = qcom_stream_is_linked(cur_str);
+            cur_str = GST_SUPERSTREAM(cam->streams[i]);
+            gboolean linked = super_stream_is_linked(cur_str);
             if (linked) {
                 cam->num_streams++;
             }
@@ -718,12 +718,12 @@ static GstStateChangeReturn qcomhal3cam_change_state(GstElement *element,
 
     if (transition == GST_STATE_CHANGE_PAUSED_TO_PLAYING) {
         /* wait for streams to create buffer pools before configure_streams */
-         qcomhal3cam_wait_buffer_pools(cam);
+         superhal3cam_wait_buffer_pools(cam);
     }
 
     if (transition == GST_STATE_CHANGE_PAUSED_TO_PLAYING) {
 
-        res = qcomhal3cam_start_camera(cam);
+        res = superhal3cam_start_camera(cam);
         if (res != TRUE) {
             GST_ERROR_OBJECT(cam, "Cannot start camera!");
             return GST_STATE_CHANGE_FAILURE;
@@ -732,7 +732,7 @@ static GstStateChangeReturn qcomhal3cam_change_state(GstElement *element,
 
     if (transition == GST_STATE_CHANGE_PLAYING_TO_PAUSED) {
 
-        res = qcomhal3cam_stop_camera(cam);
+        res = superhal3cam_stop_camera(cam);
         if (res != TRUE) {
             GST_ERROR_OBJECT(cam, "Cannot stop camera!");
             return GST_STATE_CHANGE_FAILURE;
@@ -741,7 +741,7 @@ static GstStateChangeReturn qcomhal3cam_change_state(GstElement *element,
 
     if (transition == GST_STATE_CHANGE_READY_TO_NULL) {
         if (cam->formats) {
-            qcomhal3cam_clear_formats_list(cam);
+            superhal3cam_clear_formats_list(cam);
         }
 
         pthread_mutex_destroy(&cam->pushsrc_sync.lock);
@@ -751,12 +751,12 @@ static GstStateChangeReturn qcomhal3cam_change_state(GstElement *element,
     return ret;
 }
 
-static void qcomhal3cam_dispose(GObject *object)
+static void superhal3cam_dispose(GObject *object)
 {
-    QcomHal3Cam *cam = GST_QCOMHAL3CAM_CAST(object);
+    SuperHal3Cam *cam = GST_SUPERHAL3CAM_CAST(object);
 
     if (cam->formats) {
-        qcomhal3cam_clear_formats_list(cam);
+        superhal3cam_clear_formats_list(cam);
     }
 
     if (cam->crt_data.msg_q) {
@@ -771,12 +771,12 @@ static void qcomhal3cam_dispose(GObject *object)
     G_OBJECT_CLASS(parent_class)->dispose(object);
 }
 
-static void qcomhal3cam_finalize(GObject *object)
+static void superhal3cam_finalize(GObject *object)
 {
-    QcomHal3Cam *cam = GST_QCOMHAL3CAM_CAST(object);
+    SuperHal3Cam *cam = GST_SUPERHAL3CAM_CAST(object);
 
     if (cam->formats) {
-        qcomhal3cam_clear_formats_list(cam);
+        superhal3cam_clear_formats_list(cam);
     }
 
     if (cam->crt_data.msg_q) {
@@ -791,7 +791,7 @@ static void qcomhal3cam_finalize(GObject *object)
     G_OBJECT_CLASS(parent_class)->finalize(object);
 }
 
-static void qcomhal3cam_class_init(QcomHal3CamClass *cam_class) {
+static void superhal3cam_class_init(SuperHal3CamClass *cam_class) {
 
     GObjectClass *gobject_class;
     GstElementClass *element_class;
@@ -799,8 +799,8 @@ static void qcomhal3cam_class_init(QcomHal3CamClass *cam_class) {
     gobject_class = G_OBJECT_CLASS(cam_class);
     element_class = GST_ELEMENT_CLASS(cam_class);
 
-    gobject_class->dispose = qcomhal3cam_dispose;
-    gobject_class->finalize = qcomhal3cam_finalize;
+    gobject_class->dispose = superhal3cam_dispose;
+    gobject_class->finalize = superhal3cam_finalize;
 
-    element_class->change_state = GST_DEBUG_FUNCPTR(qcomhal3cam_change_state);
+    element_class->change_state = GST_DEBUG_FUNCPTR(superhal3cam_change_state);
 }

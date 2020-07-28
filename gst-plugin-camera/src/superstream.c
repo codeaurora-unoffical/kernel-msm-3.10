@@ -9,27 +9,27 @@
 #include <hardware/hardware.h>
 #include <system/camera_metadata.h>
 //#include <hardware/gralloc1.h>
-#include "qcomstream.h"
+#include "superstream.h"
 
 #define FIXATE_WIDTH (1280)
 #define FIXATE_HEIGHT (720)
 #define MIN_BUFFERS (2)
 
-#define QCOM_STREAM_FORMAT_COUNT (G_N_ELEMENTS(qcom_formats))
+#define SUPER_STREAM_FORMAT_COUNT (G_N_ELEMENTS(super_formats))
 
-#define qcomstream_parent_class parent_class
+#define superstream_parent_class parent_class
 
-G_DEFINE_TYPE(QcomStream, qcomstream, GST_TYPE_PUSH_SRC);
+G_DEFINE_TYPE(SuperStream, superstream, GST_TYPE_PUSH_SRC);
 
 static const camera_metadata_enum_android_scaler_available_formats_t
-    qcom_formats[] = {
+    super_formats[] = {
     ANDROID_SCALER_AVAILABLE_FORMATS_YV12,
     ANDROID_SCALER_AVAILABLE_FORMATS_YCrCb_420_SP,
     ANDROID_SCALER_AVAILABLE_FORMATS_YCbCr_420_888,
     ANDROID_SCALER_AVAILABLE_FORMATS_IMPLEMENTATION_DEFINED
 };
 
-static void qcomstream_init(QcomStream *stream)
+static void superstream_init(SuperStream *stream)
 {
     stream->formats = NULL;
 
@@ -37,7 +37,7 @@ static void qcomstream_init(QcomStream *stream)
     gst_base_src_set_live(GST_BASE_SRC(stream), TRUE);
 }
 
-GstElement *qcom_stream_create(const gpointer cam_bin, const gchar *name,
+GstElement *super_stream_create(const gpointer cam_bin, const gchar *name,
     int (*notify_bp_created)(gpointer cam_bin), int cam_id)
 {
     GstElement *stream = NULL;
@@ -46,28 +46,28 @@ GstElement *qcom_stream_create(const gpointer cam_bin, const gchar *name,
     g_return_val_if_fail(name != NULL, NULL);
     g_return_val_if_fail(notify_bp_created != NULL, NULL);
 
-    stream = g_object_new(GST_TYPE_QCOMSTREAM, "name", name, NULL);
+    stream = g_object_new(GST_TYPE_SUPERSTREAM, "name", name, NULL);
     if (!stream) {
         return NULL;
     }
 
-    GST_QCOMSTREAM(stream)->cam_bin = cam_bin;
-    GST_QCOMSTREAM(stream)->bp_created_cb = notify_bp_created;
-    GST_QCOMSTREAM(stream)->cam_id = cam_id;
+    GST_SUPERSTREAM(stream)->cam_bin = cam_bin;
+    GST_SUPERSTREAM(stream)->bp_created_cb = notify_bp_created;
+    GST_SUPERSTREAM(stream)->cam_id = cam_id;
 
     return stream;
 }
 
-static void qcom_stream_clear_formats_list(QcomStream *stream)
+static void super_stream_clear_formats_list(SuperStream *stream)
 {
     g_list_free(stream->formats);
     stream->formats = NULL;
 }
 
-static void qcom_stream_finalize(QcomStream *stream)
+static void super_stream_finalize(SuperStream *stream)
 {
     if (stream->formats) {
-        qcom_stream_clear_formats_list(stream);
+        super_stream_clear_formats_list(stream);
     }
 
     if (stream->probed_caps) {
@@ -89,7 +89,7 @@ static gint compare_by_frame_size(GstStructure *lhs, GstStructure *rhs)
     return ((rhs_height * rhs_width) - (lhs_height * lhs_width));
 }
 
-gboolean qcom_stream_save_formats(QcomStream *str, GList *formats)
+gboolean super_stream_save_formats(SuperStream *str, GList *formats)
 {
     g_return_val_if_fail(str != NULL, FALSE);
     g_return_val_if_fail(formats != NULL, FALSE);
@@ -100,7 +100,7 @@ gboolean qcom_stream_save_formats(QcomStream *str, GList *formats)
     return TRUE;
 }
 
-static GstVideoFormat qcom_stream_halpixelformat_to_video_format(
+static GstVideoFormat super_stream_halpixelformat_to_video_format(
     guint32 hal_format)
 {
     GstVideoFormat gst_format;
@@ -121,7 +121,7 @@ static GstVideoFormat qcom_stream_halpixelformat_to_video_format(
     return gst_format;
 }
 
-static GstStructure *qcom_stream_halpixelformat_to_gst_struct(guint32 format)
+static GstStructure *super_stream_halpixelformat_to_gst_struct(guint32 format)
 {
     GstStructure *structure = NULL;
 
@@ -129,7 +129,7 @@ static GstStructure *qcom_stream_halpixelformat_to_gst_struct(guint32 format)
     case ANDROID_SCALER_AVAILABLE_FORMATS_IMPLEMENTATION_DEFINED:
     case ANDROID_SCALER_AVAILABLE_FORMATS_YCbCr_420_888: {
         GstVideoFormat gst_format;
-        gst_format = qcom_stream_halpixelformat_to_video_format(format);
+        gst_format = super_stream_halpixelformat_to_video_format(format);
         if (gst_format != GST_VIDEO_FORMAT_UNKNOWN) {
             structure = gst_structure_new("video/x-raw", "format",
                     G_TYPE_STRING, gst_video_format_to_string(gst_format), NULL);
@@ -145,7 +145,7 @@ static GstStructure *qcom_stream_halpixelformat_to_gst_struct(guint32 format)
     return structure;
 }
 
-static GstCaps *qcom_stream_get_caps_from_formats(QcomStream *stream)
+static GstCaps *super_stream_get_caps_from_formats(SuperStream *stream)
 {
     int res;
     GstCaps *ret = gst_caps_new_empty();
@@ -153,9 +153,9 @@ static GstCaps *qcom_stream_get_caps_from_formats(QcomStream *stream)
     GList *cur_fmt;
 
     for (cur_fmt = stream->formats; cur_fmt; cur_fmt = cur_fmt->next) {
-        QcomHALFormat *format = (QcomHALFormat *) cur_fmt->data;
+        SuperHALFormat *format = (SuperHALFormat *) cur_fmt->data;
         GstStructure *template =
-            qcom_stream_halpixelformat_to_gst_struct(format->pix_fmt);
+            super_stream_halpixelformat_to_gst_struct(format->pix_fmt);
 
         if (template) {
             gst_structure_set(template, "width", G_TYPE_INT,
@@ -177,7 +177,7 @@ static GstCaps *qcom_stream_get_caps_from_formats(QcomStream *stream)
     return ret;
 }
 
-static void qcom_stream_set_all_features(GstCaps *caps)
+static void super_stream_set_all_features(GstCaps *caps)
 {
     GstCapsFeatures *feat_any;
     GstCapsFeatures *feat_copy;
@@ -204,14 +204,14 @@ static void qcom_stream_set_all_features(GstCaps *caps)
     gst_caps_set_features(caps, i, feat_any);
 }
 
-static GstCaps *qcom_stream_probe_caps(QcomStream *stream, GstCaps *filter)
+static GstCaps *super_stream_probe_caps(SuperStream *stream, GstCaps *filter)
 {
     GstCaps *ret;
     GList *cur_fmt;
 
     ret = gst_caps_new_empty();
 
-    GstCaps *tmp = qcom_stream_get_caps_from_formats(stream);
+    GstCaps *tmp = super_stream_get_caps_from_formats(stream);
 
     if (gst_caps_is_empty(tmp)) {
         GST_ERROR_OBJECT(stream, "Cannot get caps from all formats!");
@@ -222,7 +222,7 @@ static GstCaps *qcom_stream_probe_caps(QcomStream *stream, GstCaps *filter)
         gst_caps_append(ret, tmp);
     }
 
-    qcom_stream_set_all_features(ret);
+    super_stream_set_all_features(ret);
 
     if (filter) {
         GstCaps *tmp = ret;
@@ -233,12 +233,12 @@ static GstCaps *qcom_stream_probe_caps(QcomStream *stream, GstCaps *filter)
     return ret;
 }
 
-static GstCaps *qcom_stream_get_caps(QcomStream *stream, GstCaps *filter)
+static GstCaps *super_stream_get_caps(SuperStream *stream, GstCaps *filter)
 {
     GstCaps *ret;
 
     if (!stream->probed_caps) {
-        stream->probed_caps = qcom_stream_probe_caps(stream, NULL);
+        stream->probed_caps = super_stream_probe_caps(stream, NULL);
     }
 
     if (filter) {
@@ -253,23 +253,23 @@ static GstCaps *qcom_stream_get_caps(QcomStream *stream, GstCaps *filter)
     return ret;
 }
 
-static GstCaps *qcom_stream_get_pad_caps(GstBaseSrc *src, GstCaps *filter)
+static GstCaps *super_stream_get_pad_caps(GstBaseSrc *src, GstCaps *filter)
 {
-    QcomStream *stream = GST_QCOMSTREAM(src);
+    SuperStream *stream = GST_SUPERSTREAM(src);
 
     if (!stream->formats) {
         return gst_pad_get_pad_template_caps(GST_BASE_SRC_PAD(stream));
     }
 
-    return qcom_stream_get_caps(stream, filter);
+    return super_stream_get_caps(stream, filter);
 }
 
-static gboolean qcom_stream_format_is_yuv(guint32 pix_fmt)
+static gboolean super_stream_format_is_yuv(guint32 pix_fmt)
 {
     return TRUE;
 }
 
-static guint32 qcom_stream_get_plane_size(const QcomHALFormat *fmt,
+static guint32 super_stream_get_plane_size(const SuperHALFormat *fmt,
     const guint plane_idx)
 {
     guint32 res = 0;
@@ -279,7 +279,7 @@ static guint32 qcom_stream_get_plane_size(const QcomHALFormat *fmt,
         return res;
     }
 
-    if (qcom_stream_format_is_yuv(fmt->pix_fmt)) {
+    if (super_stream_format_is_yuv(fmt->pix_fmt)) {
         /* To be replaced with
          * ANDROID_SCALER_AVAILABLE_FORMATS_IMPLEMENTATION_DEFINED when
          * GST_VIDEO_FORMAT_NV12 is mapped to it */
@@ -295,7 +295,7 @@ static guint32 qcom_stream_get_plane_size(const QcomHALFormat *fmt,
     return res;
 }
 
-static void qcom_stream_calc_sizeimage(QcomHALFormat *format)
+static void super_stream_calc_sizeimage(SuperHALFormat *format)
 {
     guint plane_size, i;
 
@@ -305,13 +305,13 @@ static void qcom_stream_calc_sizeimage(QcomHALFormat *format)
     }
 
     for (i = 0; i < format->planes_cnt; ++i) {
-        plane_size = qcom_stream_get_plane_size(format, i);
+        plane_size = super_stream_get_plane_size(format, i);
         format->total_size += plane_size;
         format->plane_size[i] = plane_size;
     }
 }
 
-static void qcom_stream_save_format(QcomStream *stream, QcomHALFormat *format,
+static void super_stream_save_format(SuperStream *stream, SuperHALFormat *format,
     GstVideoInfo *info, GstVideoAlignment *align)
 {
     const GstVideoFormatInfo *finfo = info->finfo;
@@ -333,7 +333,7 @@ static void qcom_stream_save_format(QcomStream *stream, QcomHALFormat *format,
     stream->planes_cnt = MAX(1, format->planes_cnt);
     info->size = 0;
 
-    qcom_stream_calc_sizeimage(format);
+    super_stream_calc_sizeimage(format);
     for (i = 0; i < format->planes_cnt; i++) {
         stride = format->stride[i];
 
@@ -359,7 +359,7 @@ static void qcom_stream_save_format(QcomStream *stream, QcomHALFormat *format,
     stream->align = *align;
 }
 
-static gboolean qcom_stream_setup_pool(QcomStream *stream, GstCaps *caps)
+static gboolean super_stream_setup_pool(SuperStream *stream, GstCaps *caps)
 {
     GST_DEBUG_OBJECT(stream, "Initializing the capture system");
 
@@ -369,7 +369,7 @@ static gboolean qcom_stream_setup_pool(QcomStream *stream, GstCaps *caps)
 
     GST_LOG_OBJECT(stream, "Initializing buffer pool");
 
-    stream->pool = (QcomBufferPool *) qcom_buffer_pool_new(stream, caps);
+    stream->pool = (SuperBufferPool *) super_buffer_pool_new(stream, caps);
     if (!stream->pool) {
         GST_ELEMENT_ERROR(stream, RESOURCE, READ,
                           (("Could not map buffers from device")),
@@ -385,10 +385,10 @@ static gboolean qcom_stream_setup_pool(QcomStream *stream, GstCaps *caps)
     return TRUE;
 }
 
-static QcomHALFormat *qcom_stream_get_format_from_fourcc_and_size(
-    QcomStream *str, guint32 fourcc, gint w, gint h)
+static SuperHALFormat *super_stream_get_format_from_fourcc_and_size(
+    SuperStream *str, guint32 fourcc, gint w, gint h)
 {
-    QcomHALFormat *fmt;
+    SuperHALFormat *fmt;
     GList *cur_format;
 
     if (fourcc == 0) {
@@ -398,7 +398,7 @@ static QcomHALFormat *qcom_stream_get_format_from_fourcc_and_size(
     cur_format = str->formats;
 
     while (cur_format) {
-        fmt = (QcomHALFormat *) cur_format->data;
+        fmt = (SuperHALFormat *) cur_format->data;
         if (fmt->pix_fmt == fourcc && fmt->width == w && fmt->height == h) {
             return fmt;
         }
@@ -409,13 +409,13 @@ static QcomHALFormat *qcom_stream_get_format_from_fourcc_and_size(
     return NULL;
 }
 
-static gboolean qcom_stream_get_caps_info(QcomStream *str, GstCaps *caps,
-    QcomHALFormat **format, GstVideoInfo *info)
+static gboolean super_stream_get_caps_info(SuperStream *str, GstCaps *caps,
+    SuperHALFormat **format, GstVideoInfo *info)
 {
     const gchar *mimetype;
     GstStructure *structure;
     guint32 fourcc = 0;
-    QcomHALFormat *fmt = NULL;
+    SuperHALFormat *fmt = NULL;
 
     structure = gst_caps_get_structure(caps, 0);
 
@@ -440,7 +440,7 @@ static gboolean qcom_stream_get_caps_info(QcomStream *str, GstCaps *caps,
         }
     }
 
-    fmt = qcom_stream_get_format_from_fourcc_and_size(str, fourcc, info->width,
+    fmt = super_stream_get_format_from_fourcc_and_size(str, fourcc, info->width,
         info->height);
 
     if (fmt == NULL) {
@@ -453,21 +453,21 @@ static gboolean qcom_stream_get_caps_info(QcomStream *str, GstCaps *caps,
     return TRUE;
 }
 
-static gboolean qcom_stream_set_format(QcomStream *str, GstCaps *caps)
+static gboolean super_stream_set_format(SuperStream *str, GstCaps *caps)
 {
     int res;
     gboolean ret;
     gint stride, i = 0;
     GstVideoInfo info;
     GstVideoAlignment align; // TODO ???
-    QcomHALFormat *fmt;
+    SuperHALFormat *fmt;
 
     memset(&fmt, 0, sizeof(fmt));
 
     gst_video_info_init(&info);
     gst_video_alignment_reset(&align);
 
-    ret = qcom_stream_get_caps_info(str, caps, &fmt, &info);
+    ret = super_stream_get_caps_info(str, caps, &fmt, &info);
     if (ret != TRUE) {
         GST_DEBUG_OBJECT(str, "can't parse caps %" GST_PTR_FORMAT,
                          caps);
@@ -492,16 +492,16 @@ static gboolean qcom_stream_set_format(QcomStream *str, GstCaps *caps)
         GST_DEBUG_OBJECT(str, "  stride %u", fmt->stride[i]);
     }
 
-    qcom_stream_save_format(str, fmt, &info, &align);
+    super_stream_save_format(str, fmt, &info, &align);
 
-    if (!qcom_stream_setup_pool(str, caps)) {
+    if (!super_stream_setup_pool(str, caps)) {
         return FALSE;
     }
 
     return TRUE;
 }
 
-static GstCaps *qcom_stream_fixate(GstBaseSrc *basesrc, GstCaps *caps)
+static GstCaps *super_stream_fixate(GstBaseSrc *basesrc, GstCaps *caps)
 {
     GstStructure *structure;
     gint i;
@@ -531,7 +531,7 @@ static GstCaps *qcom_stream_fixate(GstBaseSrc *basesrc, GstCaps *caps)
     return caps;
 }
 
-static gboolean qcom_stream_are_caps_equal(QcomStream *stream, GstCaps *caps)
+static gboolean super_stream_are_caps_equal(SuperStream *stream, GstCaps *caps)
 {
     gboolean ret;
 
@@ -552,7 +552,7 @@ static gboolean qcom_stream_are_caps_equal(QcomStream *stream, GstCaps *caps)
     return ret;
 }
 
-static gboolean qcom_stream_stop_pool(QcomStream *stream)
+static gboolean super_stream_stop_pool(SuperStream *stream)
 {
     gboolean ret = TRUE;
     GST_DEBUG_OBJECT(stream, "stopping");
@@ -567,24 +567,24 @@ static gboolean qcom_stream_stop_pool(QcomStream *stream)
     return ret;
 }
 
-static gboolean qcom_stream_set_caps(GstBaseSrc *src, GstCaps *caps)
+static gboolean super_stream_set_caps(GstBaseSrc *src, GstCaps *caps)
 {
     gboolean res;
 
-    QcomStream *stream = GST_QCOMSTREAM(src);
+    SuperStream *stream = GST_SUPERSTREAM(src);
 
-    if (qcom_stream_are_caps_equal(stream, caps)) {
+    if (super_stream_are_caps_equal(stream, caps)) {
         return TRUE;
     }
 
-    if (!qcom_stream_stop_pool(stream)) {
+    if (!super_stream_stop_pool(stream)) {
         return FALSE;
     }
 
-    return qcom_stream_set_format(stream, caps);
+    return super_stream_set_format(stream, caps);
 }
 
-static gboolean qcom_stream_negotiate(GstBaseSrc *basesrc)
+static gboolean super_stream_negotiate(GstBaseSrc *basesrc)
 {
     GstCaps *caps = NULL;
     GstCaps *source_caps;
@@ -624,7 +624,7 @@ static gboolean qcom_stream_negotiate(GstBaseSrc *basesrc)
         caps = gst_caps_truncate(caps);
 
         if (!gst_caps_is_empty(caps)) {
-            caps = qcom_stream_fixate(basesrc, caps);
+            caps = super_stream_fixate(basesrc, caps);
             GST_DEBUG_OBJECT(basesrc, "fixated to: %" GST_PTR_FORMAT, caps);
 
             if (gst_caps_is_any(caps)) {
@@ -638,7 +638,7 @@ static gboolean qcom_stream_negotiate(GstBaseSrc *basesrc)
     return result;
 }
 
-static gboolean qcom_stream_decide_allocation_helper(QcomStream *stream,
+static gboolean super_stream_decide_allocation_helper(SuperStream *stream,
     GstQuery *query)
 {
     int res;
@@ -652,7 +652,7 @@ static gboolean qcom_stream_decide_allocation_helper(QcomStream *stream,
     gst_query_parse_allocation(query, &caps, NULL);
 
     if (!stream->pool) {
-        res = qcom_stream_setup_pool(stream, caps);
+        res = super_stream_setup_pool(stream, caps);
         if (res != TRUE) {
             goto cleanup;
         }
@@ -742,12 +742,12 @@ cleanup:
     return FALSE;
 }
 
-static gboolean qcom_stream_decide_allocation(GstBaseSrc *bsrc, GstQuery *query)
+static gboolean super_stream_decide_allocation(GstBaseSrc *bsrc, GstQuery *query)
 {
     gboolean ret;
-    QcomStream *stream = GST_QCOMSTREAM(bsrc);
+    SuperStream *stream = GST_SUPERSTREAM(bsrc);
 
-    ret = qcom_stream_decide_allocation_helper(stream, query);
+    ret = super_stream_decide_allocation_helper(stream, query);
     if (ret) {
         ret = GST_BASE_SRC_CLASS(parent_class)->decide_allocation(bsrc,
                                                                   query);
@@ -768,11 +768,11 @@ static gboolean qcom_stream_decide_allocation(GstBaseSrc *bsrc, GstQuery *query)
     return ret;
 }
 
-static gboolean qcom_stream_query(GstBaseSrc *bsrc, GstQuery *query)
+static gboolean super_stream_query(GstBaseSrc *bsrc, GstQuery *query)
 {
     gboolean res = FALSE;
 
-    QcomStream *stream = GST_QCOMSTREAM(bsrc);
+    SuperStream *stream = GST_SUPERSTREAM(bsrc);
     GstQueryType query_type = GST_QUERY_TYPE(query);
 
     if (query_type == GST_QUERY_LATENCY) {
@@ -784,9 +784,9 @@ static gboolean qcom_stream_query(GstBaseSrc *bsrc, GstQuery *query)
     return res;
 }
 
-static gboolean qcom_stream_start(GstBaseSrc *src)
+static gboolean super_stream_start(GstBaseSrc *src)
 {
-    QcomStream *stream = GST_QCOMSTREAM(src);
+    SuperStream *stream = GST_SUPERSTREAM(src);
 
     stream->frame_cnt = 0;
 
@@ -796,15 +796,15 @@ static gboolean qcom_stream_start(GstBaseSrc *src)
     return TRUE;
 }
 
-static gboolean qcom_stream_stop(GstBaseSrc *src)
+static gboolean super_stream_stop(GstBaseSrc *src)
 {
     gboolean res = TRUE;
 
-    QcomStream *stream = GST_QCOMSTREAM(src);
+    SuperStream *stream = GST_SUPERSTREAM(src);
 
     if (stream->pool &&
         gst_buffer_pool_is_active((GstBufferPool *) stream->pool)) {
-        res = qcom_stream_stop_pool(stream);
+        res = super_stream_stop_pool(stream);
         if (!res) {
             return res;
         }
@@ -813,9 +813,9 @@ static gboolean qcom_stream_stop(GstBaseSrc *src)
     return res;
 }
 
-static gboolean qcom_stream_unlock(GstBaseSrc *src)
+static gboolean super_stream_unlock(GstBaseSrc *src)
 {
-    QcomStream *stream = GST_QCOMSTREAM(src);
+    SuperStream *stream = GST_SUPERSTREAM(src);
 
     GST_LOG_OBJECT(stream, "Start flushing");
 
@@ -828,9 +828,9 @@ static gboolean qcom_stream_unlock(GstBaseSrc *src)
     return TRUE;
 }
 
-static gboolean qcom_stream_unlock_stop(GstBaseSrc *src)
+static gboolean super_stream_unlock_stop(GstBaseSrc *src)
 {
-    QcomStream *stream = GST_QCOMSTREAM(src);
+    SuperStream *stream = GST_SUPERSTREAM(src);
 
     GST_LOG_OBJECT(stream, "Stop flushing");
 
@@ -843,7 +843,7 @@ static gboolean qcom_stream_unlock_stop(GstBaseSrc *src)
     return TRUE;
 }
 
-gboolean qcom_stream_is_linked(QcomStream *str)
+gboolean super_stream_is_linked(SuperStream *str)
 {
     GstPad *peer = NULL;
     GstObject *cam_bin_proxy_pad = NULL;
@@ -856,7 +856,7 @@ gboolean qcom_stream_is_linked(QcomStream *str)
         return FALSE;
     }
 
-    /* peer's parent is the proxy ghost pad of qcomhal3cam bin element */
+    /* peer's parent is the proxy ghost pad of superhal3cam bin element */
     cam_bin_proxy_pad = gst_pad_get_parent(peer);
     if (!cam_bin_proxy_pad) {
         GST_ERROR_OBJECT(str, "Cannot get parent object of peer pad!");
@@ -866,19 +866,19 @@ gboolean qcom_stream_is_linked(QcomStream *str)
     return gst_pad_is_linked(GST_PAD(cam_bin_proxy_pad));
 }
 
-static GstStateChangeReturn qcom_stream_change_state(GstElement *element,
+static GstStateChangeReturn super_stream_change_state(GstElement *element,
                                                      GstStateChange transition)
 {
     GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
-    QcomStream *stream = GST_QCOMSTREAM(element);
+    SuperStream *stream = GST_SUPERSTREAM(element);
     int res;
 
     /* State change should only be completed for sources, whose pad's
-       corresponding ghostPad in qcomhal3bin bin is linked to a downstream
+       corresponding ghostPad in superhal3bin bin is linked to a downstream
        element */
-    if (!qcom_stream_is_linked(stream)) {
+    if (!super_stream_is_linked(stream)) {
         GST_INFO_OBJECT(stream, "%s is not linked to a ghost pad"
-            " of QcomHal3Cam bin, which is linked to a downstream element -"
+            " of SuperHal3Cam bin, which is linked to a downstream element -"
             " will not change state",
             stream->pushsrc.parent.element.object.name);
         return ret;
@@ -899,7 +899,7 @@ static GstStateChangeReturn qcom_stream_change_state(GstElement *element,
         gst_caps_replace(&stream->probed_caps, NULL);
 
         if (stream->formats) {
-            qcom_stream_clear_formats_list(stream);
+            super_stream_clear_formats_list(stream);
             stream->formats = NULL;
         }
     }
@@ -907,7 +907,7 @@ static GstStateChangeReturn qcom_stream_change_state(GstElement *element,
     return ret;
 }
 
-static GstFlowReturn qcom_stream_create_buff(GstPushSrc *src, GstBuffer **buf)
+static GstFlowReturn super_stream_create_buff(GstPushSrc *src, GstBuffer **buf)
 {
     GstFlowReturn ret;
     GstMessage *qos_msg;
@@ -917,7 +917,7 @@ static GstFlowReturn qcom_stream_create_buff(GstPushSrc *src, GstBuffer **buf)
     GTimeVal g_now;
     struct timespec now;
     GstClockTime gst_now;
-    QcomStream *stream = GST_QCOMSTREAM(src);
+    SuperStream *stream = GST_SUPERSTREAM(src);
 
     ret = GST_BASE_SRC_CLASS(parent_class)->alloc(GST_BASE_SRC(src), 0,
                                                   stream->info.size, buf);
@@ -964,7 +964,7 @@ static GstFlowReturn qcom_stream_create_buff(GstPushSrc *src, GstBuffer **buf)
     return ret;
 }
 
-static GstCaps *qcom_stream_get_all_caps()
+static GstCaps *super_stream_get_all_caps()
 {
     static GstCaps *s_caps = NULL;
 
@@ -973,19 +973,19 @@ static GstCaps *qcom_stream_get_all_caps()
         GstStructure *structure;
         GstCaps *all_caps = gst_caps_new_empty();
 
-        for (i = 0; i < QCOM_STREAM_FORMAT_COUNT; i++) {
-            structure = qcom_stream_halpixelformat_to_gst_struct(
-                qcom_formats[i]);
+        for (i = 0; i < SUPER_STREAM_FORMAT_COUNT; i++) {
+            structure = super_stream_halpixelformat_to_gst_struct(
+                super_formats[i]);
 
             if (structure) {
                 gst_structure_set(structure, "width", GST_TYPE_INT_RANGE,
-                    1, QCOM_CAM_MAX_SIZE, "height", GST_TYPE_INT_RANGE, 1,
-                    QCOM_CAM_MAX_SIZE, "framerate", GST_TYPE_FRACTION_RANGE,
+                    1, SUPER_CAM_MAX_SIZE, "height", GST_TYPE_INT_RANGE, 1,
+                    SUPER_CAM_MAX_SIZE, "framerate", GST_TYPE_FRACTION_RANGE,
                     0, 1, G_MAXINT, 1, NULL);
                 gst_caps_append_structure(all_caps, structure);
             }
         }
-        qcom_stream_set_all_features(all_caps);
+        super_stream_set_all_features(all_caps);
 
         all_caps = gst_caps_simplify(all_caps);
 
@@ -995,7 +995,7 @@ static GstCaps *qcom_stream_get_all_caps()
     return s_caps;
 }
 
-gboolean qcom_stream_set_num_buffers(QcomStream *str, const GValue *value)
+gboolean super_stream_set_num_buffers(SuperStream *str, const GValue *value)
 {
     g_return_val_if_fail(str != NULL, FALSE);
     g_return_val_if_fail(value != NULL, FALSE);
@@ -1005,7 +1005,7 @@ gboolean qcom_stream_set_num_buffers(QcomStream *str, const GValue *value)
     return TRUE;
 }
 
-gint qcom_stream_get_num_buffers(QcomStream *vid)
+gint super_stream_get_num_buffers(SuperStream *vid)
 {
     GValue value = { 0 };
     gint ret;
@@ -1023,7 +1023,7 @@ gint qcom_stream_get_num_buffers(QcomStream *vid)
     return ret;
 }
 
-static void qcomstream_class_init(QcomStreamClass *class)
+static void superstream_class_init(SuperStreamClass *class)
 {
     GObjectClass *gobject_class;
     GstElementClass *element_class;
@@ -1035,30 +1035,30 @@ static void qcomstream_class_init(QcomStreamClass *class)
     basesrc_class = GST_BASE_SRC_CLASS(class);
     pushsrc_class = GST_PUSH_SRC_CLASS(class);
 
-    gobject_class->finalize = (GObjectFinalizeFunc) qcom_stream_finalize;
+    gobject_class->finalize = (GObjectFinalizeFunc) super_stream_finalize;
 
-    element_class->change_state = qcom_stream_change_state;
+    element_class->change_state = super_stream_change_state;
 
     gst_element_class_set_static_metadata(element_class,
         "Video Source", "Source/Video",
         "Streams frames from a <placeholder-for-camera>",
-        "Qcom");
+        "Super");
 
     gst_element_class_add_pad_template(element_class,
         gst_pad_template_new("src", GST_PAD_SRC, GST_PAD_ALWAYS,
-                             qcom_stream_get_all_caps()));
+                             super_stream_get_all_caps()));
 
-    basesrc_class->get_caps = GST_DEBUG_FUNCPTR(qcom_stream_get_pad_caps);
-    basesrc_class->set_caps = GST_DEBUG_FUNCPTR(qcom_stream_set_caps);
-    basesrc_class->start = GST_DEBUG_FUNCPTR(qcom_stream_start);
-    basesrc_class->unlock = GST_DEBUG_FUNCPTR(qcom_stream_unlock);
-    basesrc_class->unlock_stop = GST_DEBUG_FUNCPTR(qcom_stream_unlock_stop);
-    basesrc_class->stop = GST_DEBUG_FUNCPTR(qcom_stream_stop);
-    basesrc_class->query = GST_DEBUG_FUNCPTR(qcom_stream_query);
-    basesrc_class->fixate = GST_DEBUG_FUNCPTR(qcom_stream_fixate);
-    basesrc_class->negotiate = GST_DEBUG_FUNCPTR(qcom_stream_negotiate);
+    basesrc_class->get_caps = GST_DEBUG_FUNCPTR(super_stream_get_pad_caps);
+    basesrc_class->set_caps = GST_DEBUG_FUNCPTR(super_stream_set_caps);
+    basesrc_class->start = GST_DEBUG_FUNCPTR(super_stream_start);
+    basesrc_class->unlock = GST_DEBUG_FUNCPTR(super_stream_unlock);
+    basesrc_class->unlock_stop = GST_DEBUG_FUNCPTR(super_stream_unlock_stop);
+    basesrc_class->stop = GST_DEBUG_FUNCPTR(super_stream_stop);
+    basesrc_class->query = GST_DEBUG_FUNCPTR(super_stream_query);
+    basesrc_class->fixate = GST_DEBUG_FUNCPTR(super_stream_fixate);
+    basesrc_class->negotiate = GST_DEBUG_FUNCPTR(super_stream_negotiate);
     basesrc_class->decide_allocation =
-        GST_DEBUG_FUNCPTR(qcom_stream_decide_allocation);
+        GST_DEBUG_FUNCPTR(super_stream_decide_allocation);
 
-    pushsrc_class->create = GST_DEBUG_FUNCPTR(qcom_stream_create_buff);
+    pushsrc_class->create = GST_DEBUG_FUNCPTR(super_stream_create_buff);
 }

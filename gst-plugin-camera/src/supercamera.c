@@ -4,16 +4,16 @@
 
 #include <gst/gstplugin.h>
 #include <stdio.h>
-#include "qcomhal3src.h"
+#include "superhal3src.h"
 
 #define GST_LICENSE "LGPL"
-#define GST_PACKAGE_NAME "Qcom HAL3 Camera"
-#define GST_PACKAGE_ORIGIN "QCOM"
+#define GST_PACKAGE_NAME "Super HAL3 Camera"
+#define GST_PACKAGE_ORIGIN "SUPER"
 
 static gboolean plugin_init(GstPlugin *plugin)
 {
-    gboolean res = gst_element_register(plugin, "qcomhal3src",
-        GST_RANK_PRIMARY, GST_TYPE_QCOMHAL3SRC);
+    gboolean res = gst_element_register(plugin, "superhal3src",
+        GST_RANK_PRIMARY, GST_TYPE_SUPERHAL3SRC);
     if (!res) {
         return FALSE;
     }
@@ -22,7 +22,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 }
 GST_PLUGIN_DEFINE(GST_VERSION_MAJOR,
                   GST_VERSION_MINOR,
-                  qcomcamera,
+                  supercamera,
                   "HAL3 based camera source element",
                   plugin_init,
                   VERSION,
