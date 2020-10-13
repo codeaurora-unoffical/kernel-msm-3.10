@@ -50,6 +50,7 @@ int main(void)
   DEFINE(TSK_STACK,		offsetof(struct task_struct, stack));
   BLANK();
   DEFINE(THREAD_CPU_CONTEXT,	offsetof(struct task_struct, thread.cpu_context));
+  DEFINE(THREAD_SCTLR,          offsetof(struct task_struct, thread.sctlr));
   BLANK();
   DEFINE(S_X0,			offsetof(struct pt_regs, regs[0]));
   DEFINE(S_X1,			offsetof(struct pt_regs, regs[1]));
