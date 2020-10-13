@@ -548,6 +548,7 @@ unsigned long arch_randomize_brk(struct mm_struct *mm)
 void arch_setup_new_exec(void)
 {
 	current->mm->context.flags = is_compat_task() ? MMCF_AARCH32 : 0;
+	current->thread.sctlr = 0;
 }
 
 #ifdef CONFIG_ARM64_TAGGED_ADDR_ABI

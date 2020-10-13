@@ -335,6 +335,8 @@ void __init setup_arch(char **cmdline_p)
 	init_task.thread_info.ttbr0 = __pa_symbol(empty_zero_page);
 #endif
 
+	init_task.thread.sctlr = 0;
+
 #ifdef CONFIG_VT
 #if defined(CONFIG_VGA_CONSOLE)
 	conswitchp = &vga_con;
