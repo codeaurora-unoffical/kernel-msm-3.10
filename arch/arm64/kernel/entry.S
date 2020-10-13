@@ -190,6 +190,12 @@ alternative_else_nop_endif
 #endif
 1:
 
+        mrs     x22, sctlr_el1
+        tbz     x22, #31, 1f
+        bic     x22, x22, (1 << 31)
+        msr     sctlr_el1, x22
+1:
+
 	mov	x29, xzr			// fp pointed to user-space
 
 #ifdef CONFIG_SHADOW_CALL_STACK
@@ -342,6 +348,13 @@ alternative_else_nop_endif
 	apply_ssbd 0, 5f, x0, x1
 5:
 	.endif
+
+        ldr     x0, [tsk, THREAD_SCTLR]
+        tbz     x0, #31, 1f
+        mrs     x0, sctlr_el1
+        bic     x0, x0, (1 << 31)
+        msr     sctlr_el1, x0
+1:
 
 	msr	elr_el1, x21			// set up the return data
 	msr	spsr_el1, x22
